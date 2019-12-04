@@ -72,7 +72,7 @@ public class GameServer implements NetworkGameProvider, Runnable {
         } else if (difficulty.equals("Hard")) {
             return Integer.toString(random.nextInt(Difficulty.Hard.getLevel() + 1));
         } else {
-            return Integer.toString(random.nextInt(Difficulty.Easy.getLevel() + 1));
+            return null;        //default
         }
     }
 
@@ -143,28 +143,31 @@ public class GameServer implements NetworkGameProvider, Runnable {
         ByteBuffer readBuffer = ByteBuffer.allocate(64);
         clientConnection.read(readBuffer);
         readBuffer.flip();
-        String clientCommand = new String(readBuffer.array(), "UTF-8").split("\n")[0];
+        String clientCommand = new String(readBuffer.array(), "UTF-8").split("\n")[0].trim();
         String response = "";
-        if (clientCommand.contains("foes")) {
-            response = getRandomNumberOfNextFoes(clientCommand.split(" ")[1]);
+        if (!clientCommand.equals("")) {
+            if (clientCommand.contains("foes")) {
+                response = getRandomNumberOfNextFoes(clientCommand.split(" ")[1]);
+            } else if (clientCommand.contains("move")) {
+                response = getRandomNextMove();
+            }
             writeBuffers.put(clientConnection, ByteBuffer.wrap(response.getBytes("UTF-8")));
-        } else if (clientCommand.contains("move")) {
-            response = getRandomNextMove();
-            writeBuffers.put(clientConnection, ByteBuffer.wrap(response.getBytes("UTF-8")));
+            System.out.printf("[%s] ---> Client Command: %s%n", clientConnection.getRemoteAddress().toString(), clientCommand);
         }
-        System.out.printf("[%s] ---> Client Command: %s%n", clientConnection.getRemoteAddress().toString(), clientCommand.trim());
     }
 
     private void writeChannelSocket(SelectionKey key) throws IOException {
         SocketChannel clientConnection = (SocketChannel) key.channel();
-        if (writeBuffers.get(clientConnection) != null) {
-            ByteBuffer writeBuffer = ByteBuffer.allocate(64);
-            writeBuffer.put(writeBuffers.get(clientConnection));
-            writeBuffer.put((byte) '\n');
-            writeBuffer.flip();
-            clientConnection.write(writeBuffer);
-            writeBuffers.remove(clientConnection);
-            System.out.printf("[%s] ---> Server Response: %s%n", clientConnection.getRemoteAddress().toString(), new String(writeBuffer.array(), "UTF-8").trim());
+        synchronized (writeBuffers) {
+            if (writeBuffers.get(clientConnection) != null) {
+                ByteBuffer writeBuffer = ByteBuffer.allocate(64);
+                writeBuffer.put(writeBuffers.get(clientConnection));
+                writeBuffer.put((byte) '\n');
+                writeBuffer.flip();
+                clientConnection.write(writeBuffer);
+                writeBuffers.remove(clientConnection);
+                System.out.printf("[%s] ---> Server Response: %s%n", clientConnection.getRemoteAddress().toString(), new String(writeBuffer.array(), "UTF-8").trim());
+            }
         }
     }
 
